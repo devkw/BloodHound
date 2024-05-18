@@ -1,20 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import PropTypes from 'prop-types';
 import clsx from 'clsx';
-import CollapsibleSection from './Components/CollapsibleSection';
-import NodeCypherLinkComplex from './Components/NodeCypherLinkComplex';
-import NodeCypherLink from './Components/NodeCypherLink';
-import NodeCypherNoNumberLink from './Components/NodeCypherNoNumberLink';
-import MappedNodeProps from './Components/MappedNodeProps';
-import ExtraNodeProps from './Components/ExtraNodeProps';
-import NodePlayCypherLink from './Components/NodePlayCypherLink';
-import Notes from './Components/Notes';
-import { withAlert } from 'react-alert';
-import NodeGallery from './Components/NodeGallery';
+import React, { useContext, useEffect, useState } from 'react';
 import { Table } from 'react-bootstrap';
-import styles from './NodeData.module.css';
-import { useContext } from 'react';
 import { AppContext } from '../../../AppContext';
+import CollapsibleSection from './Components/CollapsibleSection';
+import ExtraNodeProps from './Components/ExtraNodeProps';
+import MappedNodeProps from './Components/MappedNodeProps';
+import NodeCypherLink from './Components/NodeCypherLink';
+import NodePlayCypherLink from './Components/NodePlayCypherLink';
+import styles from './NodeData.module.css';
 
 const GroupNodeData = () => {
     const [visible, setVisible] = useState(false);
@@ -45,7 +38,7 @@ const GroupNodeData = () => {
                 .then((r) => {
                     let props = r.records[0].get('node').properties;
                     setNodeProps(props);
-                    setLabel(props.name || objectid);
+                    setLabel(props.name || props.azname || objectid);
                     session.close();
                 });
         } else {
@@ -281,7 +274,7 @@ const GroupNodeData = () => {
 
                 <hr></hr>
 
-                <CollapsibleSection header='OUTBOUND COTROL RIGHTS'>
+                <CollapsibleSection header='OUTBOUND OBJECT CONTROL'>
                     <div className={styles.itemlist}>
                         <Table>
                             <thead></thead>
@@ -308,7 +301,7 @@ const GroupNodeData = () => {
                                     property='Transitive Object Control'
                                     target={objectid}
                                     baseQuery={
-                                        'MATCH (n) WHERE NOT n.objectid=$objectid WITH n MATCH p = shortestPath((g:Group {objectid: $objectid})-[r:MemberOf|AddMember|AllExtendedRights|ForceChangePassword|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns*1..]->(n))'
+                                        'MATCH (n) WHERE NOT n.objectid=$objectid WITH n MATCH p = shortestPath((g:Group {objectid: $objectid})-[r:MemberOf|AddSelf|WriteSPN|AddKeyCredentialLink|AddMember|AllExtendedRights|ForceChangePassword|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns*1..]->(n))'
                                     }
                                     start={label}
                                     distinct
@@ -329,7 +322,7 @@ const GroupNodeData = () => {
                                     property='Explicit Object Controllers'
                                     target={objectid}
                                     baseQuery={
-                                        'MATCH p = (n)-[r:AddMember|AllExtendedRights|ForceChangePassword|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns]->(g:Group {objectid: $objectid})'
+                                        'MATCH p = (n)-[r:AddMember|AddSelf|WriteSPN|AddKeyCredentialLink|AllExtendedRights|ForceChangePassword|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns]->(g:Group {objectid: $objectid})'
                                     }
                                     end={label}
                                     distinct
@@ -347,7 +340,7 @@ const GroupNodeData = () => {
                                     property='Transitive Object Controllers'
                                     target={objectid}
                                     baseQuery={
-                                        'MATCH (n) WHERE NOT n.objectid=$objectid WITH n MATCH p = shortestPath((n)-[r:MemberOf|AddMember|AllExtendedRights|ForceChangePassword|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns*1..]->(g:Group {objectid: $objectid}))'
+                                        'MATCH (n) WHERE NOT n.objectid=$objectid WITH n MATCH p = shortestPath((n)-[r:MemberOf|AddSelf|WriteSPN|AddKeyCredentialLink|AddMember|AllExtendedRights|ForceChangePassword|GenericAll|GenericWrite|WriteDacl|WriteOwner|Owns*1..]->(g:Group {objectid: $objectid}))'
                                     }
                                     end={label}
                                     distinct

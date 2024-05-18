@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef } from 'react';
-import PropTypes from 'prop-types';
 import { AsyncTypeahead, Menu, MenuItem } from 'react-bootstrap-typeahead';
 import GlyphiconSpan from '../GlyphiconSpan';
 import Icon from '../Icon';
@@ -59,7 +58,7 @@ const SearchContainer = () => {
                 type: node.type,
             };
             closeTooltip();
-            var elem = jQuery(pathfinding.current);
+            let elem = jQuery(pathfinding.current);
             if (!elem.is(':visible')) {
                 setPathfindingOpen(true);
                 elem.slideToggle('fast');
@@ -83,8 +82,17 @@ const SearchContainer = () => {
         session.run(statement, { name: term }).then((result) => {
             let data = [];
             for (let record of result.records) {
-                let properties = record._fields[0].properties;
-                properties.type = record._fields[0].labels[1];
+                let node = record.get(0);
+                let properties = node.properties;
+                let labels = node.labels;
+                if (labels.length === 1) {
+                    properties.type = labels[0];
+                } else {
+                    properties.type = labels.filter((x) => {
+                        return x !== 'Base' && x !== 'AZBase';
+                    })[0];
+                }
+
                 data.push(properties);
             }
 
@@ -283,7 +291,9 @@ const SearchContainer = () => {
                     id={'mainSearchBar'}
                     filterBy={(option, props) => {
                         let name = (
-                            option.name || option.objectid
+                            option.name ||
+                            option.azname ||
+                            option.objectid
                         ).toLowerCase();
                         let id =
                             option.objectid != null
@@ -327,18 +337,16 @@ const SearchContainer = () => {
                             </Menu>
                         );
                     }}
-                    // renderMenuItemChildren={(option, props, index) => {
-                    //     return (
-                    //         <SearchRow item={option} search={mainSearchValue} />
-                    //     );
-                    // }}
                     labelKey={(option) => {
-                        return option.name || option.objectid;
+                        return option.name || option.azname || option.objectid;
                     }}
                     useCache={false}
                     options={mainSearchResults}
                     onSearch={(query) => doSearch(query, 'main')}
-                    inputProps={{ className: 'searchbox', id: styles.searcha }}
+                    inputProps={{
+                        className: 'searchbox',
+                        id: styles.searcha,
+                    }}
                     onKeyDown={(event) => onEnterPress(event)}
                     onChange={(selection) => setSelection(selection, 'main')}
                     onInputChange={(event) => {
@@ -419,11 +427,15 @@ const SearchContainer = () => {
                             );
                         }}
                         labelKey={(option) => {
-                            return option.name || option.objectid;
+                            return (
+                                option.name || option.azname || option.objectid
+                            );
                         }}
                         filterBy={(option, props) => {
                             let name = (
-                                option.name || option.objectid
+                                option.name ||
+                                option.azname ||
+                                option.objectid
                             ).toLowerCase();
                             let id =
                                 option.objectid != null

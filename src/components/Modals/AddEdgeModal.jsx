@@ -1,24 +1,27 @@
-import React, { useEffect, useState, useRef } from 'react';
-import PropTypes from 'prop-types';
+import React, { useContext, useEffect, useState } from 'react';
 import {
-    Modal,
-    FormGroup,
-    FormControl,
     Button,
     ControlLabel,
+    FormControl,
+    FormGroup,
+    Modal,
 } from 'react-bootstrap';
-import { AsyncTypeahead } from 'react-bootstrap-typeahead';
+import { AsyncTypeahead, Menu, MenuItem } from 'react-bootstrap-typeahead';
 import styles from './AddEdgeModal.module.css';
 import SearchRow from '../SearchContainer/SearchRow';
-import { buildSearchQuery, buildSelectQuery } from 'utils';
+import { buildSearchQuery } from 'utils';
 import BaseModal from './BaseModal';
 import { motion } from 'framer-motion';
+import clsx from 'clsx';
+import { AppContext } from '../../AppContext';
 
 const AddEdgeModal = () => {
     const [open, setOpen] = useState(false);
     const [showComplete, setShowComplete] = useState(false);
     const [source, setSource] = useState(null);
     const [target, setTarget] = useState(null);
+    const [sourceValue, setSourceValue] = useState('');
+    const [targetValue, setTargetValue] = useState('');
     const [edgeValue, setEdgeValue] = useState('MemberOf');
     const defaultErrors = {
         sourceErrors: '',
@@ -31,6 +34,8 @@ const AddEdgeModal = () => {
     const [targetLoading, setTargetLoading] = useState(false);
     const [sourceSearchResults, setSourceSearchResults] = useState([]);
     const [targetSearchResults, setTargetSearchResults] = useState([]);
+
+    const context = useContext(AppContext);
 
     useEffect(() => {
         emitter.on('addEdge', handleOpen);
@@ -49,7 +54,7 @@ const AddEdgeModal = () => {
     };
 
     const setSelection = (selection, source) => {
-        if (selection.length === 0) {
+        if (selection == null || selection.length === 0) {
             return;
         }
 
@@ -75,8 +80,12 @@ const AddEdgeModal = () => {
 
         let data = [];
         for (let record of result.records) {
-            let properties = record._fields[0].properties;
-            properties.type = record._fields[0].labels[0];
+            let node = record.get(0);
+            let properties = node.properties;
+            let fType = node.labels.filter(
+                (w) => w !== 'Base' && w !== 'AZBase'
+            );
+            properties.type = fType.length > 0 ? fType[0] : 'Base';
             data.push(properties);
         }
 
@@ -87,7 +96,7 @@ const AddEdgeModal = () => {
             setTargetSearchResults(data);
             setTargetLoading(false);
         }
-        session.close();
+        await session.close();
     };
 
     const validateAndSubmit = async () => {
@@ -126,7 +135,7 @@ const AddEdgeModal = () => {
             sourceid: source.objectid,
             targetid: target.objectid,
         });
-        session.close();
+        await session.close();
 
         if (results.records.length > 0) {
             errors.edgeErrors = 'Edge already exists';
@@ -145,7 +154,11 @@ const AddEdgeModal = () => {
             edgeValue === 'Owns' ||
             edgeValue === 'WriteDacl' ||
             edgeValue === 'WriteOwner' ||
-            edgeValue === 'ReadLAPSPassword'
+            edgeValue === 'ReadLAPSPassword' ||
+            edgeValue === 'WriteSPN' ||
+            edgeValue === 'AddKeyCredentialLink' ||
+            edgeValue === 'AddSelf' ||
+            edgeValue === 'SyncLAPSPassword'
         ) {
             edgepart = `[r:${edgeValue} {isacl: true}]`;
         } else if (edgeValue === 'SQLAdmin') {
@@ -157,11 +170,11 @@ const AddEdgeModal = () => {
         session = driver.session();
         statement = `MATCH (n:${source.type} {objectid: $sourceid}) MATCH (m:${target.type} {objectid: $targetid}) MERGE (n)-${edgepart}->(m) RETURN r`;
 
-        results = await session.run(statement, {
+        await session.run(statement, {
             sourceid: source.objectid,
             targetid: target.objectid,
         });
-        session.close();
+        await session.close();
         setShowComplete(true);
         setTimeout(() => {
             handleClose();
@@ -186,18 +199,49 @@ const AddEdgeModal = () => {
                         <AsyncTypeahead
                             id={'addEdgeSourceSearch'}
                             isLoading={sourceLoading}
-                            onSearch={() => {}}
                             placeholder={'Source Node'}
                             delay={500}
-                            renderMenuItemChildren={SearchRow}
-                            labelKey={option => {
-                                return option.name || option.objectid;
+                            renderMenu={(results, menuProps, props) => {
+                                return (
+                                    <Menu
+                                        {...menuProps}
+                                        className={clsx(
+                                            context.darkMode
+                                                ? styles.darkmenu
+                                                : null
+                                        )}
+                                    >
+                                        {results.map((result, index) => {
+                                            return (
+                                                <MenuItem
+                                                    option={result}
+                                                    position={index}
+                                                    key={index}
+                                                >
+                                                    <SearchRow
+                                                        item={result}
+                                                        search={sourceValue}
+                                                    />
+                                                </MenuItem>
+                                            );
+                                        })}
+                                    </Menu>
+                                );
+                            }}
+                            labelKey={(option) => {
+                                return (
+                                    option.name ||
+                                    option.azname ||
+                                    option.objectid
+                                );
                             }}
                             useCache={false}
                             options={sourceSearchResults}
                             filterBy={(option, props) => {
                                 let name = (
-                                    option.name || option.objectid
+                                    option.name ||
+                                    option.azname ||
+                                    option.objectid
                                 ).toLowerCase();
                                 let id = option.objectid.toLowerCase();
                                 let search;
@@ -210,12 +254,13 @@ const AddEdgeModal = () => {
                                     name.includes(search) || id.includes(search)
                                 );
                             }}
-                            onChange={selection =>
+                            onChange={(selection) =>
                                 setSelection(selection, 'main')
                             }
-                            onSearch={query => doSearch(query, 'main')}
-                            onInputChange={() => {
+                            onSearch={(query) => doSearch(query, 'main')}
+                            onInputChange={(event) => {
                                 setSource(null);
+                                setSourceValue(event);
                                 setErrors(defaultErrors);
                             }}
                         />
@@ -230,7 +275,7 @@ const AddEdgeModal = () => {
                         <FormControl
                             value={edgeValue}
                             componentClass='select'
-                            onChange={event => {
+                            onChange={(event) => {
                                 setEdgeValue(event.target.value);
                             }}
                         >
@@ -253,7 +298,7 @@ const AddEdgeModal = () => {
                                 ReadLAPSPassword
                             </option>
                             <option value='Contains'>Contains</option>
-                            <option value='GpLink'>GpLink</option>
+                            <option value='GPLink'>GPLink</option>
                             <option value='CanRDP'>CanRDP</option>
                             <option value='CanPSRemote'>CanPSRemote</option>
                             <option value='ExecuteDCOM'>ExecuteDCOM</option>
@@ -264,8 +309,22 @@ const AddEdgeModal = () => {
                                 AddAllowedToAct
                             </option>
                             <option value='AllowedToAct'>AllowedToAct</option>
+                            <option value='AddKeyCredentialLink'>
+                                AddKeyCredentialLink
+                            </option>
+                            <option value='WriteSPN'>WriteSPN</option>
+                            <option value='AddSelf'>AddSelf</option>
                             <option value='SQLAdmin'>SQLAdmin</option>
                             <option value='HasSIDHistory'>HasSIDHistory</option>
+                            <option value='SyncLAPSPassword'>
+                                SyncLAPSPassword
+                            </option>
+                            <option value='WriteAccountRestrictions'>
+                                WriteAccountRestrictions
+                            </option>
+                            <option value='DumpSMSAPassword'>
+                                DumpSMSAPassword
+                            </option>
                         </FormControl>
                         {errors.edgeErrors.length > 0 && (
                             <span className={styles.error}>
@@ -278,18 +337,49 @@ const AddEdgeModal = () => {
                         <AsyncTypeahead
                             id={'addEdgeTargetSearch'}
                             isLoading={targetLoading}
-                            onSearch={() => {}}
                             placeholder={'Target Node'}
                             delay={500}
-                            renderMenuItemChildren={SearchRow}
-                            labelKey={option => {
-                                return option.name || option.objectid;
+                            renderMenu={(results, menuProps, props) => {
+                                return (
+                                    <Menu
+                                        {...menuProps}
+                                        className={clsx(
+                                            context.darkMode
+                                                ? styles.darkmenu
+                                                : null
+                                        )}
+                                    >
+                                        {results.map((result, index) => {
+                                            return (
+                                                <MenuItem
+                                                    option={result}
+                                                    position={index}
+                                                    key={index}
+                                                >
+                                                    <SearchRow
+                                                        item={result}
+                                                        search={targetValue}
+                                                    />
+                                                </MenuItem>
+                                            );
+                                        })}
+                                    </Menu>
+                                );
+                            }}
+                            labelKey={(option) => {
+                                return (
+                                    option.name ||
+                                    option.azname ||
+                                    option.objectid
+                                );
                             }}
                             useCache={false}
                             options={targetSearchResults}
                             filterBy={(option, props) => {
                                 let name = (
-                                    option.name || option.objectid
+                                    option.name ||
+                                    option.azname ||
+                                    option.objectid
                                 ).toLowerCase();
                                 let id = option.objectid.toLowerCase();
                                 let search;
@@ -302,11 +392,12 @@ const AddEdgeModal = () => {
                                     name.includes(search) || id.includes(search)
                                 );
                             }}
-                            onChange={selection =>
+                            onChange={(selection) =>
                                 setSelection(selection, 'target')
                             }
-                            onSearch={query => doSearch(query, 'target')}
-                            onInputChange={() => {
+                            onSearch={(query) => doSearch(query, 'target')}
+                            onInputChange={(event) => {
+                                setTargetValue(event);
                                 setTarget(null);
                                 setErrors(defaultErrors);
                             }}
